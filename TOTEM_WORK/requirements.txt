@@ -1,0 +1,3 @@
+# Instalar dependencias por componente. Ver README.md
+-r requirements-server.txt
+-r requirements-client.txt

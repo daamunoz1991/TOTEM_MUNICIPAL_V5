@@ -1,0 +1,24 @@
+TÓTEM MUNICIPAL - PORTAL WEB SINCRONIZADO CON KIVY
+
+CATÁLOGO
+El catálogo web está alineado con client/screens/tramites.py:
+- Beneficios sociales: SAP, EDA, SUF.
+- Solicitudes municipales: POD, LUM, VOL, DEM.
+- Denuncias y fiscalización: DEN.
+- Reservas: Agenda para el Registro Social de Hogares, Atención Clínica Veterinaria, Esterilización Canina y Esterilización Felina.
+
+RESERVAS
+La página consulta /reservas/disponibilidad en FastAPI. No genera horarios por su cuenta: muestra solo los horarios que el servidor devuelve como disponibles. Las reglas del servidor son compartidas con Kivy: atención general lunes a jueves 09:00-16:40 cada 20 minutos; viernes 09:00-16:00; esterilización canina martes y jueves 09:00-09:18 cada 2 minutos; esterilización felina lunes, miércoles y viernes 09:00-09:18 cada 2 minutos. Sábados y domingos no hay horarios.
+
+EJECUCIÓN LOCAL
+1. Inicia PostgreSQL y la API según el README principal del proyecto.
+2. Desde la raíz TOTEM_WORK: python -m uvicorn server.main:app --host 127.0.0.1 --port 8001
+3. En otra consola: cd web
+4. Ejecuta: py -m http.server 5500
+5. Abre http://127.0.0.1:5500
+
+IMPORTANTE
+- El catálogo muestra solo los códigos Kivy que también están activos en /tramites. Si falta alguno, revisa que esté activo en PostgreSQL.
+- La API por defecto es http://127.0.0.1:8001. Para otro equipo, configura API_BASE en app.js y CORS_ORIGINS en .env.
+- La disponibilidad se obtiene del servidor y considera reservas existentes.
+- Antes de publicar en Internet, usa HTTPS, configura CORS para el dominio real y revisa privacidad y protección contra abuso.

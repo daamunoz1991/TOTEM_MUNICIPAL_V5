@@ -1,0 +1,30 @@
+# Secretos
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Bases de datos y datos privados
+*.db
+*.sqlite
+*.sqlite3
+backups/
+data/
+
+# logs y builds
+*.log
+build/
+dist/
+*.apk
+.vscode/
+.idea/

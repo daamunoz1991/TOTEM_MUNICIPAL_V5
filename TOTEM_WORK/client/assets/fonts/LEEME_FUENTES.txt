@@ -1,0 +1,13 @@
+TIPOGRAFÍA ROBOTO
+
+Para utilizar Roboto en todas las pantallas Kivy, descarga desde https://fonts.google.com/specimen/Roboto los archivos estáticos:
+- Roboto-Regular.ttf
+- Roboto-Bold.ttf
+
+Cópialos en esta carpeta (client/assets/fonts/). El cliente los registrará automáticamente al iniciar. Si no están presentes, la aplicación seguirá funcionando con la fuente predeterminada del sistema.
+
+Paleta oficial:
+Azul marino #16324F
+Turquesa #18A6A6
+Blanco #FFFFFF
+Gris claro #F2F5F8
