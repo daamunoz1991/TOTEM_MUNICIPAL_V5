@@ -672,6 +672,7 @@ def consultar_solicitud_publica(codigo: str, db: Session = Depends(get_db)):
     return {
         "codigo_solicitud": s.codigo_solicitud,
         "nombre_tramite": s.tramite.nombre if s.tramite else "Trámite municipal",
+	"departamento": s.tramite.departamento if s.tramite and s.tramite.departamento else "Por asignar",
         "estado": s.estado,
         "fecha_solicitud": s.fecha_solicitud.isoformat() if s.fecha_solicitud else "",
     }

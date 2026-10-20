@@ -20,7 +20,7 @@ class ClienteAPI:
         url_base: Optional[str] = None,
         timeout: int = 10,
     ):
-        self.url_base = (url_base or os.getenv("TOTEM_API_URL", "http://127.0.0.1:8001")).rstrip("/")
+        self.url_base = (url_base or os.getenv("TOTEM_API_URL", "https://aptciudadano.dns.army/api")).rstrip("/")
         self.timeout = timeout
         self.session = requests.Session()
         self.ultima_error: Optional[str] = None
@@ -216,7 +216,7 @@ class ClienteAPI:
     def consultar_solicitud(self, codigo: str):
         return self._request(
             "GET",
-            f"/solicitudes/{codigo}",
+            f"/publico/solicitudes/{codigo}",
         )
 
     def listar_solicitudes(self):

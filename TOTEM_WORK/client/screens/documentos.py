@@ -7,7 +7,8 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.popup import Popup
-from kivy.uix.filechooser import FileChooserListView
+
+from screens.adjuntos import GestorAdjuntos
 
 from screens.estilo_totem import (
     CELESTE, BLANCO, GRIS, VERDE, aplicar_fondo, crear_cabecera
@@ -25,6 +26,9 @@ class DocumentosScreen(Screen):
         self.descripcion = ""
         self.archivos_seleccionados = []
         self._popup_archivos = None
+        self.gestor_adjuntos = GestorAdjuntos(
+            self._archivos_recibidos, self._error_adjunto
+        )
 
         aplicar_fondo(self)
         principal = BoxLayout(
@@ -65,18 +69,26 @@ class DocumentosScreen(Screen):
         )
         principal.add_widget(self.mensaje)
 
-        acciones = GridLayout(cols=2, spacing=dp(12),
-                              size_hint_y=None, height=dp(62))
+        acciones = GridLayout(cols=3, spacing=dp(7),
+                              size_hint_y=None, height=dp(68))
         adjuntar = Button(
-            text="SELECCIONAR ARCHIVOS", font_size=dp(17),
+            text="ELEGIR\nARCHIVOS", font_size=dp(13),
             background_normal="", background_color=CELESTE,
             color=(0.025, 0.075, 0.13, 1)
         )
         adjuntar.bind(on_release=self.abrir_selector)
         acciones.add_widget(adjuntar)
 
+        foto = Button(
+            text="TOMAR\nFOTO", font_size=dp(13),
+            background_normal="", background_color=CELESTE,
+            color=(0.025, 0.075, 0.13, 1)
+        )
+        foto.bind(on_release=self.tomar_foto)
+        acciones.add_widget(foto)
+
         continuar = Button(
-            text="CONTINUAR", font_size=dp(18),
+            text="CONTINUAR", font_size=dp(13),
             background_normal="", background_color=VERDE, color=BLANCO
         )
         continuar.bind(on_release=self.continuar)
@@ -99,59 +111,22 @@ class DocumentosScreen(Screen):
         self.actualizar_lista()
 
     def abrir_selector(self, *_):
-        contenido = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
-        selector = FileChooserListView(
-            path=str(Path.home()),
-            filters=["*.pdf", "*.PDF", "*.jpg", "*.JPG", "*.jpeg",
-                     "*.JPEG", "*.png", "*.PNG"],
-            multiselect=True
-        )
-        contenido.add_widget(selector)
+        self.gestor_adjuntos.seleccionar(multiple=True)
 
-        acciones = GridLayout(cols=2, spacing=dp(8),
-                              size_hint_y=None, height=dp(50))
-        agregar = Button(text="AGREGAR", background_normal="",
-                         background_color=CELESTE,
-                         color=(0.025, 0.075, 0.13, 1))
-        cancelar = Button(text="CANCELAR", background_normal="",
-                          background_color=GRIS, color=BLANCO)
-        acciones.add_widget(agregar)
-        acciones.add_widget(cancelar)
-        contenido.add_widget(acciones)
+    def tomar_foto(self, *_):
+        self.gestor_adjuntos.tomar_foto()
 
-        popup = Popup(
-            title="Seleccionar documentos", content=contenido,
-            size_hint=(0.92, 0.9), auto_dismiss=False,
-            separator_color=CELESTE
-        )
-        self._popup_archivos = popup
-
-        def agregar_seleccion(_):
-            seleccion = selector.selection or []
-            if not seleccion:
-                self.mensaje.text = "Seleccione al menos un archivo."
-                return
-            omitidos = []
-            for ruta in seleccion:
-                archivo = Path(ruta)
-                if not archivo.is_file():
-                    continue
-                if archivo.suffix.lower() not in self.EXTENSIONES_PERMITIDAS:
-                    omitidos.append(archivo.name)
-                    continue
+    def _archivos_recibidos(self, rutas):
+        for ruta in rutas:
+            archivo = Path(ruta)
+            if archivo.is_file() and archivo.suffix.lower() in self.EXTENSIONES_PERMITIDAS:
                 if ruta not in self.archivos_seleccionados:
                     self.archivos_seleccionados.append(ruta)
-            popup.dismiss()
-            self.actualizar_lista()
-            self.mensaje.text = (
-                f"{len(self.archivos_seleccionados)} archivo(s) seleccionado(s)."
-                if not omitidos else
-                "Se omitieron archivos de formato no permitido."
-            )
+        self.actualizar_lista()
+        self.mensaje.text = f"{len(self.archivos_seleccionados)} archivo(s) preparado(s)."
 
-        agregar.bind(on_release=agregar_seleccion)
-        cancelar.bind(on_release=lambda *_: popup.dismiss())
-        popup.open()
+    def _error_adjunto(self, mensaje):
+        self.mensaje.text = str(mensaje)
 
     def actualizar_lista(self):
         if not self.archivos_seleccionados:
