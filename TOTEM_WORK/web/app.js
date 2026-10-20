@@ -1,5 +1,5 @@
 // La web usa la API compartida con el Tótem Kivy. Ajusta esta dirección si la API está en otro equipo.
-const API_BASE = (window.TOTEM_API_BASE || "http://127.0.0.1:8001").replace(/\/$/, "");
+const API_BASE = (window.TOTEM_API_BASE || "/api").replace(/\/$/, "");
 const viewIds = ["homeView","catalogView","detailView","authView","registerView","documentsView","confirmView","ticketView","bookingView","bookingTicketView","statusView"];
 let tramites = [], selected = null, lastTicket = "", lastReservation = "", accessToken = "", authenticatedUser = null, selectedFiles = [];
 // Catálogo web sincronizado con client/screens/tramites.py (CATEGORIES de Kivy).
