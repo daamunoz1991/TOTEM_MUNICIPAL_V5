@@ -14,10 +14,10 @@ from kivy.uix.textinput import TextInput
 from kivy.uix.checkbox import CheckBox
 from kivy.uix.spinner import Spinner
 from kivy.uix.scrollview import ScrollView
-from kivy.uix.filechooser import FileChooserListView
 from kivy.uix.popup import Popup
 from kivy.graphics import Color, RoundedRectangle
 from api.cliente_api import ClienteAPI
+from screens.adjuntos import GestorAdjuntos
 
 NAVY=(22/255,50/255,79/255,1); TEAL=(24/255,166/255,166/255,1); WHITE=(1,1,1,1)
 BG=(242/255,245/255,248/255,1); GRAY=(0.30,0.35,0.40,1); GREEN=(24/255,166/255,166/255,1)
@@ -53,11 +53,22 @@ class TramitesScreen(Screen):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.categoria_actual=""; self.tramite_actual=None; self.archivo=None; self.checks={}; self.horarios=[]; self.pending_submission=None
-        self.archivos_eda={"cedula":None,"avaluo":None,"otro":None}
+        # La CI requiere dos fotografías independientes. Los demás respaldos
+        # se agregan a una lista sin reemplazar los ya seleccionados.
+        self.archivos_eda = {
+            "cedula_anverso": None,
+            "cedula_reverso": None,
+            "avaluo": None,
+        }
+        self.archivos_extra = []
+        self._adjunto_destino = "general"
+        self._etiquetas_archivos = {}
+        self._lista_adicionales = None
+        self.gestor_adjuntos = GestorAdjuntos(self._adjunto_recibido, self._error_adjunto)
         self.api=ClienteAPI()
         with self.canvas.before:
-            Color(*BG); self.bg=RoundedRectangle(pos=self.pos,size=self.size)
-        self.bind(pos=self._bg,size=self._bg)
+            Color(*BG); self._fondo=RoundedRectangle(pos=self.pos,size=self.size)
+        self.bind(pos=self._actualizar_fondo,size=self._actualizar_fondo)
         self.root=BoxLayout(orientation="vertical",padding=dp(20),spacing=dp(12))
         header=BoxLayout(orientation="vertical",size_hint_y=None,height=dp(76),padding=[dp(18),dp(8)])
         with header.canvas.before:
@@ -87,7 +98,9 @@ class TramitesScreen(Screen):
         self.root.add_widget(back); self.add_widget(self.root)
         self.mostrar_categorias()
 
-    def _bg(self,*_): self.bg.pos=self.pos; self.bg.size=self.size
+    def _actualizar_fondo(self, *args):
+        self._fondo.pos = self.pos
+        self._fondo.size = self.size
     def on_pre_enter(self,*_):
         self.api=ClienteAPI()  # recupera el token creado por la pantalla de autenticación
         # Si hay un trámite seleccionado, mostrar su formulario directamente
@@ -108,6 +121,7 @@ class TramitesScreen(Screen):
         b.bind(on_release=callback); return b
     def mostrar_categorias(self):
         self.tramite_actual=None; self.categoria_actual=""
+        self._reiniciar_adjuntos()
         self.title.text="¿QUÉ NECESITAS REALIZAR?"
         self.body.clear_widgets()
         self.message.text="Seleccione una sección para continuar."
@@ -161,7 +175,8 @@ class TramitesScreen(Screen):
         self.body.add_widget(scroll)
 
     def seleccionar(self,item):
-        self.tramite_actual={"codigo":item[0],"nombre":item[1],"descripcion":item[2]}; self.archivo=None
+        self._reiniciar_adjuntos()
+        self.tramite_actual={"codigo":item[0],"nombre":item[1],"descripcion":item[2]}
         # Mostrar formulario directamente; el login se solicita al final si es necesario
         self.mostrar_formulario(self.tramite_actual)
 
@@ -238,10 +253,9 @@ class TramitesScreen(Screen):
                 etiqueta_causal.bind(size=lambda obj, value: setattr(obj, 'text_size', value))
                 form.add_widget(etiqueta_causal)
                 form.add_widget(self.fields['causal'])
-                # Documentos específicos para EDA
-                self._file_button_labeled(form, "CÉDULA DE IDENTIDAD PROPIETARIO", "cedula", "Adjunte cédula de identidad del propietario")
+                # EDA: la CI se solicita separada en anverso y reverso.
+                self._campos_cedula(form)
                 self._file_button_labeled(form, "CERTIFICADO DE AVALÚO", "avaluo", "Adjunte certificado de avalúo")
-                self._file_button_labeled(form, "OTRO DOCUMENTO", "otro", "Adjunte otro documento de respaldo")
             elif code=='SAP':
                 self.fields['nombre_propietario']=self._field(form,'Nombre de propietario','Nombre completo del propietario')
                 self.fields['direccion']=self._field(form,'Dirección','Calle y número')
@@ -257,8 +271,7 @@ class TramitesScreen(Screen):
                 etiqueta_rsh.bind(size=lambda obj, value: setattr(obj, 'text_size', value))
                 form.add_widget(etiqueta_rsh)
                 form.add_widget(self.fields['porcentaje_rsh'])
-                self._file_button(form,optional=False)
-                self._file_button(form,optional=False)
+                self._campos_cedula(form)
             else:
                 self.fields['direccion']=self._field(form,'Dirección','Calle y número')
                 self.fields['referencia']=self._field(form,'Punto de referencia','Entre calles o referencia cercana')
@@ -276,14 +289,16 @@ class TramitesScreen(Screen):
                     form.add_widget(etiqueta_area)
                     form.add_widget(self.fields['area'])
                 self.fields['descripcion']=self._field(form,'Descripción','Describa la solicitud',True,100)
-            if code in {'SAP','EDA','SUF'}: self._file_button(form,optional=False)
-            else: self._file_button(form,optional=True)
+            if code == 'SUF':
+                self._campos_cedula(form)
+            # Todas las solicitudes pueden llevar varios documentos de respaldo.
+            self._file_button(form, optional=True)
         # Botones de acción
         botones_box = BoxLayout(size_hint_y=None, height=dp(54), spacing=dp(10))
         btn_atras = Button(text='ATRÁS', background_normal='', background_color=COLOR_SECUNDARIO, color=WHITE, font_size=dp(16))
         btn_atras.bind(on_release=lambda *_: self.mostrar_categoria(self.categoria_actual))
         botones_box.add_widget(btn_atras)
-        btn_enviar = self._button('ENVIAR SOLICITUD' if not code.startswith('BOOK_') else 'CONFIRMAR RESERVA', lambda *_: self.enviar(), 54)
+        btn_enviar = self._button('ENVIAR SOLICITUD' if not code.startswith('BOOK') else 'CONFIRMAR RESERVA', lambda *_: self.enviar(), 54)
         botones_box.add_widget(btn_enviar)
         form.add_widget(botones_box)
         scroll.add_widget(form); self.body.add_widget(scroll)
@@ -313,9 +328,9 @@ class TramitesScreen(Screen):
 
         # Navegación de mes
         nav_box = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(8))
-        btn_anterior = Button(text='◀', size_hint_x=None, width=dp(50), background_normal='', background_color=TEAL, color=WHITE, font_size=dp(18))
+        btn_anterior = Button(text='◀️', size_hint_x=None, width=dp(50), background_normal='', background_color=TEAL, color=WHITE, font_size=dp(18))
         self._cal_label = Label(text='', color=NAVY, font_size=dp(16), bold=True)
-        btn_siguiente = Button(text='▶', size_hint_x=None, width=dp(50), background_normal='', background_color=TEAL, color=WHITE, font_size=dp(18))
+        btn_siguiente = Button(text='▶️', size_hint_x=None, width=dp(50), background_normal='', background_color=TEAL, color=WHITE, font_size=dp(18))
         nav_box.add_widget(btn_anterior)
         nav_box.add_widget(self._cal_label)
         nav_box.add_widget(btn_siguiente)
@@ -416,55 +431,212 @@ class TramitesScreen(Screen):
                 btn.background_color = WHITE
                 btn.color = NAVY
 
-    def _file_button(self,parent,optional=True):
-        self.file_label=Label(text='Adjunto opcional' if optional else 'Adjunte documentos requeridos (PDF, JPG o PNG)',color=GRAY,size_hint_y=None,height=dp(30))
-        parent.add_widget(self.file_label); parent.add_widget(self._button('SELECCIONAR ARCHIVO',lambda *_:self.abrir_archivo(),42))
+    # ==============================================================
+    # ADJUNTOS: anverso, reverso, avalúo y varios respaldos
+    # ==============================================================
+    MAX_ADICIONALES = 6
+
+    def _reiniciar_adjuntos(self):
+        """Limpia los adjuntos al iniciar otro trámite (no durante el login)."""
+        self.archivo = None  # compatibilidad con la navegación existente
+        self.archivos_eda = {
+            'cedula_anverso': None,
+            'cedula_reverso': None,
+            'avaluo': None,
+        }
+        self.archivos_extra = []
+        self._adjunto_destino = 'general'
+        self._etiquetas_archivos = {}
+        self._lista_adicionales = None
+
+    def _campos_cedula(self, parent):
+        self._file_button_labeled(
+            parent, 'CÉDULA DE IDENTIDAD - ANVERSO',
+            'cedula_anverso', 'Fotografía del frente del carnet'
+        )
+        self._file_button_labeled(
+            parent, 'CÉDULA DE IDENTIDAD - REVERSO',
+            'cedula_reverso', 'Fotografía de la parte posterior del carnet'
+        )
 
     def _file_button_labeled(self, parent, etiqueta, key, hint):
-        """Crea un botón de archivo con etiqueta personalizada para EDA."""
-        label = Label(text=etiqueta, color=NAVY, font_size=dp(14), size_hint_y=None, height=dp(24), halign='left', valign='middle')
-        label.bind(size=lambda obj, value: setattr(obj, 'text_size', value))
-        parent.add_widget(label)
-        btn = self._button('SELECCIONAR ARCHIVO', lambda *_: self.abrir_archivo_eda(key), 42)
-        parent.add_widget(btn)
-        # Guardar referencia al botón para actualizar su texto después
-        if not hasattr(self, '_file_buttons_eda'):
-            self._file_buttons_eda = {}
-        self._file_buttons_eda[key] = btn
+        titulo = Label(
+            text=etiqueta, color=NAVY, font_size=dp(14),
+            size_hint_y=None, height=dp(30), halign='left', valign='middle'
+        )
+        titulo.bind(size=lambda o, v: setattr(o, 'text_size', v))
+        parent.add_widget(titulo)
+
+        estado = Label(
+            text='Pendiente: ' + hint, color=GRAY, font_size=dp(12),
+            size_hint_y=None, height=dp(30), halign='left', valign='middle'
+        )
+        estado.bind(size=lambda o, v: setattr(o, 'text_size', v))
+        parent.add_widget(estado)
+        self._etiquetas_archivos[key] = estado
+        if self.archivos_eda.get(key):
+            estado.text = 'Adjuntado: ' + Path(self.archivos_eda[key]).name[:36]
+
+        acciones = GridLayout(cols=3, size_hint_y=None, height=dp(49), spacing=dp(5))
+        b_archivo = self._button('ELEGIR', lambda *_: self.abrir_archivo_eda(key), 45)
+        b_foto = self._button('FOTO', lambda *_: self.tomar_foto_adjunto(key), 45)
+        b_quitar = self._button('QUITAR', lambda *_: self._quitar_documento(key), 45)
+        for boton in (b_archivo, b_foto, b_quitar):
+            boton.font_size = dp(13)
+            acciones.add_widget(boton)
+        parent.add_widget(acciones)
+
+    def _file_button(self, parent, optional=True):
+        titulo = Label(
+            text=f'DOCUMENTOS ADICIONALES (máximo {self.MAX_ADICIONALES})',
+            color=NAVY, font_size=dp(14), bold=True,
+            size_hint_y=None, height=dp(34), halign='left', valign='middle'
+        )
+        titulo.bind(size=lambda o, v: setattr(o, 'text_size', v))
+        parent.add_widget(titulo)
+        acciones = GridLayout(cols=2, size_hint_y=None, height=dp(52), spacing=dp(8))
+        b_archivo = self._button('ELEGIR ARCHIVOS', lambda *_: self.abrir_archivo(), 48)
+        b_foto = self._button('TOMAR FOTO', lambda *_: self.tomar_foto_adjunto(), 48)
+        b_archivo.font_size = dp(14)
+        b_foto.font_size = dp(14)
+        acciones.add_widget(b_archivo)
+        acciones.add_widget(b_foto)
+        parent.add_widget(acciones)
+
+        self._lista_adicionales = BoxLayout(
+            orientation='vertical', spacing=dp(5), size_hint_y=None
+        )
+        self._lista_adicionales.bind(
+            minimum_height=self._lista_adicionales.setter('height')
+        )
+        parent.add_widget(self._lista_adicionales)
+        self._actualizar_lista_adicionales()
 
     def abrir_archivo_eda(self, key):
-        """Abre selector de archivo para un tipo específico de documento EDA."""
-        content = BoxLayout(orientation='vertical', spacing=dp(8))
-        chooser = FileChooserListView(filters=['*.pdf', '*.jpg', '*.jpeg', '*.png'], path=str(Path.home()))
-        content.add_widget(chooser)
-        row = GridLayout(cols=2, size_hint_y=None, height=dp(48), spacing=dp(8))
-        popup = Popup(title='Seleccionar documento', content=content, size_hint=(.92, .88))
-        ok = Button(text='Seleccionar')
-        cancel = Button(text='Cancelar')
-        row.add_widget(ok)
-        row.add_widget(cancel)
-        content.add_widget(row)
+        self._adjunto_destino = key
+        self.gestor_adjuntos.seleccionar(multiple=False)
 
-        def select(*_):
-            if chooser.selection:
-                self.archivos_eda[key] = chooser.selection[0]
-                # Actualizar texto del botón con nombre del archivo
-                nombre = Path(self.archivos_eda[key]).name
-                if hasattr(self, '_file_buttons_eda') and key in self._file_buttons_eda:
-                    self._file_buttons_eda[key].text = f"✓ {nombre[:30]}"
-            popup.dismiss()
-
-        ok.bind(on_release=select)
-        cancel.bind(on_release=lambda *_: popup.dismiss())
-        popup.open()
     def abrir_archivo(self):
-        content=BoxLayout(orientation='vertical',spacing=dp(8)); chooser=FileChooserListView(filters=['*.pdf','*.jpg','*.jpeg','*.png'],path=str(Path.home()))
-        content.add_widget(chooser); row=GridLayout(cols=2,size_hint_y=None,height=dp(48),spacing=dp(8)); popup=Popup(title='Seleccionar documento o fotografía',content=content,size_hint=(.92,.88))
-        ok=Button(text='Seleccionar'); cancel=Button(text='Cancelar'); row.add_widget(ok); row.add_widget(cancel); content.add_widget(row)
-        def select(*_):
-            if chooser.selection: self.archivo=chooser.selection[0]; self.file_label.text=Path(self.archivo).name
-            popup.dismiss()
-        ok.bind(on_release=select); cancel.bind(on_release=lambda *_:popup.dismiss()); popup.open()
+        self._adjunto_destino = 'general'
+        self.gestor_adjuntos.seleccionar(multiple=True)
+
+    def tomar_foto_adjunto(self, key='general'):
+        self._adjunto_destino = key
+        self.gestor_adjuntos.tomar_foto()
+
+    def _adjunto_recibido(self, rutas):
+        if not rutas:
+            return
+        destino = self._adjunto_destino
+        if destino in self.archivos_eda:
+            ruta = str(rutas[0])
+            self.archivos_eda[destino] = ruta
+            etiqueta = self._etiquetas_archivos.get(destino)
+            if etiqueta is not None:
+                etiqueta.text = 'Adjuntado: ' + Path(ruta).name[:36]
+            self.message.text = 'Documento preparado correctamente.'
+            return
+
+        nuevos = [str(r) for r in rutas if str(r) not in self.archivos_extra]
+        if len(self.archivos_extra) + len(nuevos) > self.MAX_ADICIONALES:
+            self.message.text = (
+                f'Solo se permiten {self.MAX_ADICIONALES} archivos adicionales por solicitud. '
+                'Quite uno antes de agregar más.'
+            )
+            return
+        self.archivos_extra.extend(nuevos)
+        self.archivo = self.archivos_extra[0] if self.archivos_extra else None
+        self._actualizar_lista_adicionales()
+        self.message.text = f'{len(self.archivos_extra)} archivo(s) adicional(es) preparados.'
+
+    def _quitar_documento(self, key):
+        self.archivos_eda[key] = None
+        etiqueta = self._etiquetas_archivos.get(key)
+        if etiqueta is not None:
+            etiqueta.text = 'Pendiente: seleccione un archivo o tome una foto.'
+        self.message.text = 'Documento retirado de la solicitud.'
+
+    def _quitar_adicional(self, ruta):
+        if ruta in self.archivos_extra:
+            self.archivos_extra.remove(ruta)
+        self.archivo = self.archivos_extra[0] if self.archivos_extra else None
+        self._actualizar_lista_adicionales()
+        self.message.text = 'Archivo retirado de la solicitud.'
+
+    def _actualizar_lista_adicionales(self):
+        panel = self._lista_adicionales
+        if panel is None:
+            return
+        panel.clear_widgets()
+        if not self.archivos_extra:
+            panel.add_widget(Label(
+                text='Sin archivos adicionales.', color=GRAY,
+                size_hint_y=None, height=dp(28), font_size=dp(13)
+            ))
+            return
+        for indice, ruta in enumerate(self.archivos_extra, start=1):
+            fila = BoxLayout(size_hint_y=None, height=dp(42), spacing=dp(5))
+            etiqueta = Label(
+                text=f'{indice}. {Path(ruta).name[:32]}',
+                color=GRAY, font_size=dp(12), halign='left', valign='middle'
+            )
+            etiqueta.bind(size=lambda o, v: setattr(o, 'text_size', v))
+            quitar = self._button(
+                'QUITAR', lambda *_, r=ruta: self._quitar_adicional(r), 38
+            )
+            quitar.size_hint_x = None
+            quitar.width = dp(92)
+            quitar.font_size = dp(12)
+            fila.add_widget(etiqueta)
+            fila.add_widget(quitar)
+            panel.add_widget(fila)
+
+    def _error_adjunto(self, mensaje):
+        self.message.text = str(mensaje)
+
+    def _validar_adjuntos(self, codigo_tramite):
+        # La CI es obligatoria cuando el beneficio exige identificación.
+        if codigo_tramite in {'SAP', 'EDA', 'SUF'}:
+            if not self.archivos_eda.get('cedula_anverso'):
+                raise ValueError('Adjunte el ANVERSO (frente) de la cédula de identidad.')
+            if not self.archivos_eda.get('cedula_reverso'):
+                raise ValueError('Adjunte el REVERSO (parte trasera) de la cédula de identidad.')
+        if codigo_tramite == 'EDA' and not self.archivos_eda.get('avaluo'):
+            raise ValueError('Adjunte el Certificado de Avalúo.')
+
+    def _adjuntos_para_subir(self):
+        archivos = []
+        for tipo, ruta in self.archivos_eda.items():
+            if ruta:
+                archivos.append((tipo, ruta))
+        for indice, ruta in enumerate(self.archivos_extra, start=1):
+            archivos.append((f'adicional_{indice}', ruta))
+        return archivos
+
+    def _subir_adjuntos(self, codigo_solicitud):
+        """POST de cada archivo al endpoint ya utilizado por FastAPI.
+
+        Devuelve advertencias concretas; registrar el ticket no garantiza
+        que sus documentos hayan sido recibidos por el servidor.
+        """
+        problemas = []
+        token = self.api.access_token
+        headers = {'Authorization': f'Bearer {token}'} if token else {}
+        for tipo, ruta in self._adjuntos_para_subir():
+            try:
+                # Los prefijos distinguen anverso y reverso en el backend.
+                nombre = f'{tipo}_{Path(ruta).name}'
+                with open(ruta, 'rb') as archivo:
+                    respuesta = requests.post(
+                        f'{self.api.url_base}/solicitudes/{codigo_solicitud}/archivos',
+                        files={'archivo': (nombre, archivo)},
+                        headers=headers, timeout=30
+                    )
+                if not respuesta.ok:
+                    problemas.append(f'{tipo}: HTTP {respuesta.status_code}')
+            except Exception as exc:
+                problemas.append(f'{tipo}: {str(exc)[:80]}')
+        return problemas
 
     def cargar_horarios(self):
         try:
@@ -561,12 +733,7 @@ class TramitesScreen(Screen):
                 motivos=[m for m,cb in self.checks.items() if cb.active]
                 if not motivos: raise ValueError('Seleccione al menos un motivo de denuncia.')
                 data['motivos']=motivos
-            if code=='EDA':
-                # Validar que los documentos obligatorios estén adjuntos
-                if not self.archivos_eda.get('cedula'):
-                    raise ValueError('Debe adjuntar la Cédula de Identidad del Propietario.')
-                if not self.archivos_eda.get('avaluo'):
-                    raise ValueError('Debe adjuntar el Certificado de Avalúo.')
+            self._validar_adjuntos(code)
             # Verificar autenticación para trámites que la requieren
             if code not in {'DEN'} and not self.api.access_token:
                 # Guardar el formulario completo antes de autenticar.
@@ -581,7 +748,6 @@ class TramitesScreen(Screen):
                 self.message.text = "Complete la autenticación para registrar su solicitud."
                 self.manager.current = 'autenticacion'
                 return
-            if self.archivo and code not in {'DEN'} and not self.api.access_token: raise ValueError('Debe iniciar sesión antes de adjuntar documentos.')
             data['descripcion']=json.dumps(data,ensure_ascii=False)
             if code=='DEN':
                 r=requests.post(self.api.url_base+'/solicitudes/publica',json=data,timeout=15)
@@ -593,47 +759,19 @@ class TramitesScreen(Screen):
                 r=None
             if r is not None:
                 result=self._leer_respuesta(r)
-            # Enviar archivos según el tipo de trámite
-            if code=='EDA':
-                archivos_a_enviar = [
-                    ('cedula', self.archivos_eda.get('cedula')),
-                    ('avaluo', self.archivos_eda.get('avaluo')),
-                    ('otro', self.archivos_eda.get('otro'))
-                ]
-                for tipo, archivo in archivos_a_enviar:
-                    if archivo:
-                        try:
-                            with open(archivo, 'rb') as f:
-                                respuesta_archivo = requests.post(
-                                    f"{self.api.url_base}/solicitudes/{result['codigo_solicitud']}/archivos",
-                                    files={'archivo': (Path(archivo).name, f)},
-                                    headers=({'Authorization': f'Bearer {self.api.access_token}'} if self.api.access_token else {}),
-                                    timeout=30
-                                )
-                            if not respuesta_archivo.ok:
-                                self.message.text = (
-                                    f"La solicitud se registró, pero el documento '{tipo}' no pudo adjuntarse. "
-                                    f"HTTP {respuesta_archivo.status_code}."
-                                )
-                        except Exception as exc:
-                            self.message.text = f"La solicitud se registró, pero falló la carga del documento '{tipo}': {exc}"
-            elif self.archivo:
-                try:
-                    with open(self.archivo,'rb') as f:
-                        respuesta_archivo = requests.post(
-                            f"{self.api.url_base}/solicitudes/{result['codigo_solicitud']}/archivos",
-                            files={'archivo': (Path(self.archivo).name, f)},
-                            headers=({'Authorization': f'Bearer {self.api.access_token}'} if self.api.access_token else {}),
-                            timeout=30
-                        )
-                    if not respuesta_archivo.ok:
-                        self.message.text = (
-                            "La solicitud se registró, pero el archivo no pudo adjuntarse. "
-                            f"HTTP {respuesta_archivo.status_code}."
-                        )
-                except Exception as exc:
-                    self.message.text = f"La solicitud se registró, pero falló la carga del archivo: {exc}"
-            self.mostrar_exito('Solicitud ingresada',f"Su solicitud fue registrada.\nCódigo de ticket: {result.get('codigo_solicitud','') }\nGuarde este código para consultar el estado.")
+            codigo_solicitud = result.get('codigo_solicitud') if isinstance(result, dict) else None
+            if not codigo_solicitud:
+                raise ValueError('La API no devolvió el código de la solicitud.')
+            errores = self._subir_adjuntos(codigo_solicitud)
+            detalle = (
+                'Su solicitud fue registrada.\n'
+                f'Código de ticket: {codigo_solicitud}\n'
+                'Guarde este código para consultar el estado.'
+            )
+            if errores:
+                detalle += ('\nAVISO: algunos documentos no llegaron al servidor: '
+                            + '; '.join(errores[:3]))
+            self.mostrar_exito('Solicitud ingresada', detalle)
         except Exception as e: self.message.text=str(e)
 
     def procesar_pendiente(self, usuario):
@@ -666,12 +804,15 @@ class TramitesScreen(Screen):
 
             nombre = data.get("nombre_tramite", self.tramite_actual.get("nombre", "Trámite municipal") if self.tramite_actual else "Trámite municipal")
             self.pending_submission = None
-            self.mostrar_ticket(nombre, codigo_ticket)
+            errores = self._subir_adjuntos(codigo_ticket)
+            advertencia = ('No se pudieron subir algunos documentos: '
+                           + '; '.join(errores[:3])) if errores else ''
+            self.mostrar_ticket(nombre, codigo_ticket, advertencia)
         except Exception as error:
             self.message.text = f"No fue posible registrar la solicitud: {error}"
             self.manager.current = "tramites"
 
-    def mostrar_ticket(self, nombre, codigo_ticket):
+    def mostrar_ticket(self, nombre, codigo_ticket, advertencia=''):
         """Pantalla de salida con opciones de nuevo trámite o cerrar sesión."""
         self.body.clear_widgets()
         self.title.text = "TRÁMITE REGISTRADO"
@@ -682,7 +823,9 @@ class TramitesScreen(Screen):
             size_hint_y=None, height=dp(55)
         ))
         panel.add_widget(Label(
-            text=f"Trámite: {nombre}\n\nTICKET DE SALIDA\n{codigo_ticket}\n\nConserve este número para consultar el estado.",
+            text=(f"Trámite: {nombre}\n\nTICKET DE SALIDA\n{codigo_ticket}"
+                  "\n\nConserve este número para consultar el estado."
+                  + (f"\n\nAVISO: {advertencia}" if advertencia else "")),
             color=NAVY, font_size=dp(22), halign="center", valign="middle"
         ))
         panel.add_widget(self._button("REALIZAR OTRO TRÁMITE", lambda *_: self.nuevo_tramite(), 60))
@@ -693,8 +836,7 @@ class TramitesScreen(Screen):
     def nuevo_tramite(self):
         # Mantiene el token de la sesión para evitar una segunda autenticación.
         self.tramite_actual = None
-        self.archivo = None
-        self.archivos_eda = {"cedula": None, "avaluo": None, "otro": None}
+        self._reiniciar_adjuntos()
         self.pending_submission = None
         self.categoria_actual = ""
         self.mostrar_categorias()
@@ -716,6 +858,7 @@ class TramitesScreen(Screen):
         self.tramite_actual = None
         self.pending_submission = None
         self.categoria_actual = ""
+        self._reiniciar_adjuntos()
         self.manager.current = "inicio"
 
     def mostrar_exito(self,titulo,detalle):

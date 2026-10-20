@@ -58,7 +58,6 @@ from screens.formulario import FormularioScreen
 from screens.documentos import DocumentosScreen
 from screens.confirmacion import ConfirmacionScreen
 from screens.seguimiento import SeguimientoScreen
-from screens.admin import AdminScreen
 
 
 class TotemMunicipalApp(App):
@@ -80,7 +79,6 @@ class TotemMunicipalApp(App):
             ("documentos", DocumentosScreen),
             ("confirmacion", ConfirmacionScreen),
             ("seguimiento", SeguimientoScreen),
-            ("admin", AdminScreen),
         ]
 
         for nombre, clase_pantalla in pantallas:

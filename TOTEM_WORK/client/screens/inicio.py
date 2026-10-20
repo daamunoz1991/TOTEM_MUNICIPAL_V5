@@ -1,23 +1,22 @@
-from pathlib import Path
+"""Pantalla de inicio adaptable del Tótem Municipal (Kivy 2.x).
+
+Diseño para teléfonos y tablets. Conserva los nombres de pantalla y los
+métodos de navegación originales del proyecto.
+"""
 from datetime import datetime
+from pathlib import Path
 
-from kivy.uix.screenmanager import Screen
-from kivy.uix.floatlayout import FloatLayout
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.gridlayout import GridLayout
-from kivy.uix.button import Button
-from kivy.uix.label import Label
-from kivy.uix.image import Image
-from kivy.uix.behaviors import ButtonBehavior
-
-from kivy.graphics import Color, RoundedRectangle, Rectangle
-from kivy.metrics import dp
 from kivy.clock import Clock
+from kivy.graphics import Color, Rectangle, RoundedRectangle
+from kivy.metrics import dp, sp
+from kivy.uix.behaviors import ButtonBehavior
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.image import Image
+from kivy.uix.label import Label
+from kivy.uix.popup import Popup
+from kivy.uix.screenmanager import Screen
 
-
-# ============================================================
-# RUTAS
-# ============================================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ASSETS_DIR = BASE_DIR / "assets"
@@ -27,838 +26,289 @@ def asset(nombre):
     return str(ASSETS_DIR / nombre)
 
 
-# ============================================================
-# COLORES
-# ============================================================
-
-AZUL_HEADER = [22/255, 50/255, 79/255, 1]
-
-AZUL_BENEFICIOS = [24/255, 166/255, 166/255, 1]
-VERDE_RESERVA = [24/255, 166/255, 166/255, 1]
-MORADO_SOLICITUDES = [24/255, 166/255, 166/255, 1]
-NARANJO_DENUNCIAS = [22/255, 50/255, 79/255, 1]
-
-AZUL_PIE = [22/255, 50/255, 79/255, 1]
-AZUL_PIE_OSCURO = [22/255, 50/255, 79/255, 1]
-
-BLANCO = [1, 1, 1, 1]
-GRIS = [0.25, 0.30, 0.37, 1]
-
-FONDO = [242/255, 245/255, 248/255, 1]
+AZUL_HEADER = (22 / 255, 50 / 255, 79 / 255, 1)
+TURQUESA = (24 / 255, 166 / 255, 166 / 255, 1)
+BLANCO = (1, 1, 1, 1)
+GRIS = (0.25, 0.30, 0.37, 1)
+FONDO = (242 / 255, 245 / 255, 248 / 255, 1)
 
 
-# ============================================================
-# TARJETA MUNICIPAL
-# ============================================================
+def ajustar_texto(widget, *args):
+    """Permite ajuste de línea dentro del espacio asignado al Label/Button."""
+    widget.text_size = (max(0, widget.width - dp(4)), max(0, widget.height - dp(2)))
 
-class TarjetaMunicipal(ButtonBehavior, FloatLayout):
 
-    def __init__(
-        self,
-        titulo,
-        subtitulo,
-        icono,
-        color,
-        **kwargs
-    ):
+def fondo_redondeado(widget, color, radio=16):
+    """Dibuja un fondo que acompaña el tamaño del widget."""
+    with widget.canvas.before:
+        Color(rgba=color)
+        rect = RoundedRectangle(pos=widget.pos, size=widget.size, radius=[dp(radio)])
+    widget.bind(pos=lambda obj, value: setattr(rect, "pos", value))
+    widget.bind(size=lambda obj, value: setattr(rect, "size", value))
+    return rect
 
+
+class TarjetaMunicipal(ButtonBehavior, BoxLayout):
+    """Tarjeta táctil de contenido vertical, legible en anchos reducidos."""
+
+    def __init__(self, titulo, subtitulo, icono, color, **kwargs):
         super().__init__(**kwargs)
-
-        self.color_tarjeta = color
-
-        # ----------------------------------------------------
-        # FONDO
-        # ----------------------------------------------------
-
-        with self.canvas.before:
-
-            Color(
-                rgba=color
-            )
-
-            self.fondo = RoundedRectangle(
-                pos=self.pos,
-                size=self.size,
-                radius=[dp(20)]
-            )
-
-        self.bind(
-            pos=self.actualizar_fondo,
-            size=self.actualizar_fondo
-        )
-
-        # ----------------------------------------------------
-        # ICONO
-        # ----------------------------------------------------
+        self.orientation = "vertical"
+        self.padding = [dp(8), dp(9), dp(8), dp(9)]
+        self.spacing = dp(3)
+        fondo_redondeado(self, color, radio=18)
 
         icono_path = ASSETS_DIR / icono
-
-        if icono_path.exists():
-
-            imagen = Image(
-                source=str(icono_path),
-                size_hint=(None, None),
-                size=(dp(100), dp(100)),
-                pos_hint={
-                    "x": 0.04,
-                    "center_y": 0.50
-                },
-                allow_stretch=True,
-                keep_ratio=True
-            )
-
-            self.add_widget(imagen)
-
+        if icono_path.is_file():
+            imagen = Image(source=str(icono_path), size_hint=(1, 1))
         else:
+            imagen = Label(text="●", color=BLANCO, font_size=sp(38), size_hint=(1, 1))
+        self.add_widget(imagen)
 
-            # Si falta el archivo mostramos un símbolo
-            imagen = Label(
-                text="●",
-                font_size=dp(55),
-                bold=True,
-                color=BLANCO,
-                size_hint=(None, None),
-                size=(dp(100), dp(100)),
-                pos_hint={
-                    "x": 0.04,
-                    "center_y": 0.50
-                }
-            )
-
-            self.add_widget(imagen)
-
-        # ----------------------------------------------------
-        # SEPARADOR
-        # ----------------------------------------------------
-
-        separador = FloatLayout(
-            size_hint=(None, None),
-            size=(dp(2), dp(105)),
-            pos_hint={
-                "x": 0.20,
-                "center_y": 0.50
-            }
-        )
-
-        with separador.canvas:
-
-            Color(
-                rgba=[
-                    1,
-                    1,
-                    1,
-                    0.45
-                ]
-            )
-
-            Rectangle(
-                pos=separador.pos,
-                size=separador.size
-            )
-
-        self.add_widget(separador)
-
-        # ----------------------------------------------------
-        # TITULO
-        # ----------------------------------------------------
-
-        titulo_label = Label(
+        self.titulo_label = Label(
             text=titulo,
-            font_size=dp(21),
-            bold=True,
-            color=BLANCO,
-            halign="left",
-            valign="middle",
-            size_hint=(0.60, 0.35),
-            pos_hint={
-                "x": 0.24,
-                "y": 0.48
-            }
-        )
-
-        titulo_label.bind(
-            size=lambda obj, value:
-            setattr(
-                obj,
-                "text_size",
-                value
-            )
-        )
-
-        self.add_widget(
-            titulo_label
-        )
-
-        # ----------------------------------------------------
-        # SUBTITULO
-        # ----------------------------------------------------
-
-        subtitulo_label = Label(
-            text=subtitulo,
-            font_size=dp(15),
-            color=[
-                0.95,
-                0.98,
-                1,
-                1
-            ],
-            halign="left",
-            valign="top",
-            size_hint=(0.60, 0.30),
-            pos_hint={
-                "x": 0.24,
-                "y": 0.18
-            }
-        )
-
-        subtitulo_label.bind(
-            size=lambda obj, value:
-            setattr(
-                obj,
-                "text_size",
-                value
-            )
-        )
-
-        self.add_widget(
-            subtitulo_label
-        )
-
-        # ----------------------------------------------------
-        # FLECHA
-        # ----------------------------------------------------
-
-        flecha = Label(
-            text="›",
-            font_size=dp(50),
+            font_size=sp(14),
             bold=True,
             color=BLANCO,
             halign="center",
             valign="middle",
-            size_hint=(0.10, 0.45),
-            pos_hint={
-                "x": 0.86,
-                "center_y": 0.50
-            }
+            size_hint_y=None,
+            height=dp(47),
         )
+        self.titulo_label.bind(size=ajustar_texto)
+        self.add_widget(self.titulo_label)
 
-        flecha.bind(
-            size=lambda obj, value:
-            setattr(
-                obj,
-                "text_size",
-                value
+        self.subtitulo_label = Label(
+            text=subtitulo,
+            font_size=sp(11),
+            color=BLANCO,
+            halign="center",
+            valign="middle",
+            size_hint_y=None,
+            height=dp(36),
+        )
+        self.subtitulo_label.bind(size=ajustar_texto)
+        self.add_widget(self.subtitulo_label)
+        self.bind(size=self._adaptar_tarjeta)
+        Clock.schedule_once(self._adaptar_tarjeta, 0)
+
+    def _adaptar_tarjeta(self, *args):
+        estrecha = self.width < dp(175)
+        baja = self.height < dp(160)
+        self.titulo_label.font_size = sp(12.5 if estrecha else 17)
+        self.titulo_label.height = dp(39 if estrecha else 52)
+        self.subtitulo_label.font_size = sp(10 if estrecha else 13)
+        self.subtitulo_label.height = dp(0 if baja else (33 if estrecha else 38))
+        self.subtitulo_label.opacity = 0 if baja else 1
+
+
+class InicioScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        with self.canvas.before:
+            Color(rgba=FONDO)
+            self.fondo = Rectangle(pos=self.pos, size=self.size)
+        self.bind(pos=self.actualizar_fondo, size=self.actualizar_fondo)
+
+        self.principal = BoxLayout(
+            orientation="vertical",
+            padding=[dp(12), dp(10), dp(12), dp(10)],
+            spacing=dp(9),
+        )
+        self.add_widget(self.principal)
+
+        # Encabezado: sin espacios manuales que desplacen el título.
+        self.header = BoxLayout(
+            orientation="horizontal", size_hint_y=None, height=dp(84),
+            padding=[dp(12), dp(8), dp(12), dp(8)], spacing=dp(10),
+        )
+        fondo_redondeado(self.header, AZUL_HEADER, radio=18)
+
+        logo_path = ASSETS_DIR / "logo_municipal.png"
+        if logo_path.is_file():
+            self.logo = Image(source=str(logo_path), size_hint_x=None, width=dp(60))
+        else:
+            self.logo = Label(text="M", font_size=sp(35), color=BLANCO,
+                              bold=True, size_hint_x=None, width=dp(60))
+        self.header.add_widget(self.logo)
+
+        # El nombre del municipio se compone con dos renglones independientes
+        # para que "MUNICIPALIDAD" no se corte en celulares estrechos.
+        datos = BoxLayout(orientation="vertical", spacing=0)
+        self.nombre_muni_1 = Label(
+            text="MUNICIPALIDAD", font_size=sp(15), bold=True,
+            color=BLANCO, halign="left", valign="middle",
+        )
+        self.nombre_muni_2 = Label(
+            text="DE LA PINTANA", font_size=sp(15), bold=True,
+            color=BLANCO, halign="left", valign="middle",
+        )
+        self.subtitulo_header = Label(
+            text="Tótem de Atención Digital", font_size=sp(11),
+            color=(0.88, 0.94, 1, 1), halign="left", valign="middle",
+        )
+        for etiqueta in (self.nombre_muni_1, self.nombre_muni_2, self.subtitulo_header):
+            etiqueta.bind(size=ajustar_texto)
+            datos.add_widget(etiqueta)
+        self.header.add_widget(datos)
+
+        self.frase_header = Label(
+            text="La Pintana\nCon Todos", italic=True, font_size=sp(16),
+            color=BLANCO, halign="right", valign="middle",
+            size_hint_x=None, width=0,
+        )
+        self.frase_header.bind(size=ajustar_texto)
+        self.header.add_widget(self.frase_header)
+        self.principal.add_widget(self.header)
+
+        self.titulo = Label(
+            text="BIENVENIDO", color=AZUL_HEADER, bold=True,
+            font_size=sp(29), size_hint_y=None, height=dp(46),
+            halign="center", valign="middle",
+        )
+        self.principal.add_widget(self.titulo)
+        self.mensaje = Label(
+            text="Seleccione una opción para comenzar", color=GRIS,
+            font_size=sp(15), size_hint_y=None, height=dp(30),
+            halign="center", valign="middle",
+        )
+        self.mensaje.bind(size=ajustar_texto)
+        self.principal.add_widget(self.mensaje)
+
+        # La cuadrícula utiliza todo el espacio vertical disponible.
+        from kivy.uix.gridlayout import GridLayout
+        self.tarjetas = GridLayout(
+            cols=2, spacing=dp(10), padding=[dp(2), dp(2), dp(2), dp(2)],
+            size_hint_y=1,
+        )
+        opciones = [
+            ("BENEFICIOS SOCIALES", "Solicitud de beneficios sociales",
+             "icon_beneficios.png", TURQUESA, self.abrir_beneficios),
+            ("RESERVAR HORA", "Agendar atención",
+             "icon_reserva.png", TURQUESA, self.abrir_reserva),
+            ("SOLICITUDES MUNICIPALES", "Solicitudes y requerimientos",
+             "icon_solicitudes.png", TURQUESA, self.abrir_solicitudes),
+            ("DENUNCIAS Y FISCALIZACIÓN", "Solicitudes de denuncias y fiscalización",
+             "icon_denuncias.png", AZUL_HEADER, self.abrir_denuncias),
+        ]
+        for titulo, subtitulo, icono, color, accion in opciones:
+            tarjeta = TarjetaMunicipal(
+                titulo=titulo, subtitulo=subtitulo, icono=icono, color=color,
             )
+            tarjeta.bind(on_release=accion)
+            self.tarjetas.add_widget(tarjeta)
+        self.principal.add_widget(self.tarjetas)
+
+        # El pie se divide en información y acciones: nunca compiten por ancho.
+        self.pie = BoxLayout(
+            orientation="vertical", size_hint_y=None, height=dp(88),
+            padding=[dp(10), dp(6), dp(10), dp(6)], spacing=dp(4),
         )
-
-        self.add_widget(
-            flecha
+        fondo_redondeado(self.pie, AZUL_HEADER, radio=16)
+        informacion = BoxLayout(orientation="horizontal", size_hint_y=None,
+                                height=dp(25), spacing=dp(8))
+        self.label_hora = Label(
+            text="00:00", color=BLANCO, bold=True, font_size=sp(14),
+            size_hint_x=None, width=dp(55), halign="left", valign="middle",
         )
+        self.label_hora.bind(size=ajustar_texto)
+        informacion.add_widget(self.label_hora)
+        self.label_fecha = Label(
+            text="", color=BLANCO, font_size=sp(11),
+            halign="right", valign="middle",
+        )
+        self.label_fecha.bind(size=ajustar_texto)
+        informacion.add_widget(self.label_fecha)
+        self.pie.add_widget(informacion)
 
-    # ========================================================
-    # ACTUALIZAR FONDO
-    # ========================================================
+        acciones = BoxLayout(orientation="horizontal", spacing=dp(8),
+                             size_hint_y=1)
+        self.boton_estado = Button(
+            text="ESTADO DE MI SOLICITUD", color=BLANCO,
+            font_size=sp(12), bold=True,
+            background_normal="", background_down="",
+            background_color=(0.12, 0.38, 0.53, 1),
+            size_hint_x=0.73, halign="center", valign="middle",
+        )
+        self.boton_estado.bind(size=ajustar_texto, on_release=self.abrir_estado)
+        acciones.add_widget(self.boton_estado)
+        self.boton_ayuda = Button(
+            text="AYUDA", color=BLANCO, font_size=sp(12), bold=True,
+            background_normal="", background_down="",
+            background_color=(0.12, 0.38, 0.53, 1),
+            size_hint_x=0.27,
+        )
+        self.boton_ayuda.bind(on_release=self.mostrar_ayuda)
+        acciones.add_widget(self.boton_ayuda)
+        self.pie.add_widget(acciones)
+        self.principal.add_widget(self.pie)
 
-    def actualizar_fondo(
-        self,
-        *args
-    ):
+        # Aviso de derechos discreto, debajo de la barra de acciones.
+        self.copyright_label = Label(
+            text="© 2026 Sistema de Atención Ciudadana APT - Todos los derechos reservados",
+            color=(0.38, 0.43, 0.49, 1),
+            font_size=sp(9),
+            size_hint_y=None,
+            height=dp(28),
+            halign="center",
+            valign="middle",
+        )
+        self.copyright_label.bind(size=ajustar_texto)
+        self.principal.add_widget(self.copyright_label)
 
+        self.bind(size=self.adaptar_pantalla)
+        Clock.schedule_once(self.adaptar_pantalla, 0)
+        Clock.schedule_interval(self.actualizar_fecha_hora, 1)
+        self.actualizar_fecha_hora()
+
+    def actualizar_fondo(self, *args):
         self.fondo.pos = self.pos
         self.fondo.size = self.size
 
-
-# ============================================================
-# PANTALLA INICIO
-# ============================================================
-
-class InicioScreen(Screen):
-
-    def __init__(
-        self,
-        **kwargs
-    ):
-
-        super().__init__(**kwargs)
-
-        # ====================================================
-        # FONDO
-        # ====================================================
-
-        with self.canvas.before:
-
-            Color(
-                rgba=FONDO
-            )
-
-            self.fondo = Rectangle(
-                pos=self.pos,
-                size=self.size
-            )
-
-        self.bind(
-            pos=self.actualizar_fondo,
-            size=self.actualizar_fondo
-        )
-
-        # ====================================================
-        # CONTENEDOR PRINCIPAL
-        # ====================================================
-
-        principal = BoxLayout(
-            orientation="vertical",
-            padding=[
-                dp(25),
-                dp(18)
-            ],
-            spacing=dp(10)
-        )
-
-        # ====================================================
-        # ENCABEZADO
-        # ====================================================
-
-        header = BoxLayout(
-            orientation="horizontal",
-            size_hint_y=None,
-            height=dp(120),
-            padding=[
-                dp(25),
-                dp(10)
-            ]
-        )
-
-        with header.canvas.before:
-
-            Color(
-                rgba=AZUL_HEADER
-            )
-
-            header.fondo = RoundedRectangle(
-                pos=header.pos,
-                size=header.size,
-                radius=[dp(18)]
-            )
-
-        header.bind(
-            pos=lambda obj, value:
-            setattr(
-                obj.fondo,
-                "pos",
-                value
-            ),
-            size=lambda obj, value:
-            setattr(
-                obj.fondo,
-                "size",
-                value
-            )
-        )
-
-        # ----------------------------------------------------
-        # LOGO
-        # ----------------------------------------------------
-
-        logo_path = ASSETS_DIR / "logo_municipal.png"
-
-        if logo_path.exists():
-
-            logo = Image(
-                source=str(logo_path),
-                size_hint_x=0.27,
-                allow_stretch=True,
-                keep_ratio=True
-            )
-
-            header.add_widget(
-                logo
-            )
-
-        else:
-
-            nombre_municipio = Label(
-                text="BIENVENIDOS",
-                font_size=dp(26),
-                bold=True,
-                color=BLANCO,
-                halign="left",
-                valign="middle",
-                size_hint_x=0.35
-            )
-
-            nombre_municipio.bind(
-                size=lambda obj, value:
-                setattr(
-                    obj,
-                    "text_size",
-                    value
-                )
-            )
-
-            header.add_widget(
-                nombre_municipio
-            )
-
-        # ----------------------------------------------------
-        # TEXTO CENTRAL
-        # ----------------------------------------------------
-
-        datos = BoxLayout(
-            orientation="vertical",
-            size_hint_x=0.48
-        )
-
-        titulo_header = Label(
-            text="                       MUNICIPALIDAD DE LA PINTANA",
-            font_size=dp(25),
-            bold=True,
-            color=BLANCO,
-            halign="left",
-            valign="middle"
-        )
-
-        titulo_header.bind(
-            size=lambda obj, value:
-            setattr(
-                obj,
-                "text_size",
-                value
-            )
-        )
-
-        subtitulo_header = Label(
-            text="                                   Totem de Atención Digital",
-            font_size=dp(17),
-            color=[
-                0.88,
-                0.94,
-                1,
-                1
-            ],
-            halign="left",
-            valign="top"
-        )
-
-        subtitulo_header.bind(
-            size=lambda obj, value:
-            setattr(
-                obj,
-                "text_size",
-                value
-            )
-        )
-
-        datos.add_widget(
-            titulo_header
-        )
-
-        datos.add_widget(
-            subtitulo_header
-        )
-
-        header.add_widget(
-            datos
-        )
-
-        # ----------------------------------------------------
-        # LOGO MUNICIPAL Y FRASE
-        # ----------------------------------------------------
-
-        marca_municipal = BoxLayout(
-            orientation="horizontal",
-            size_hint_x=0.25,
-            spacing=dp(10)
-        )
-
-        logo_municipal_path = ASSETS_DIR / "logo_municipLLal.png"
-        if logo_municipal_path.exists():
-            logo_municipal = Image(
-                source=str(logo_municipal_path),
-                size_hint=(None, None),
-                size=(dp(90), dp(90)),
-                pos_hint={"center_y": 0.5},
-                allow_stretch=True,
-                keep_ratio=True
-            )
-            marca_municipal.add_widget(logo_municipal)
-
-        frase = Label(
-            text="La Pintana\n Con Todos",
-            font_size=dp(18),
-            italic=True,
-            color=BLANCO,
-            halign="right",
-            valign="middle"
-        )
-        frase.bind(
-            size=lambda obj, value: setattr(obj, "text_size", value)
-        )
-        marca_municipal.add_widget(frase)
-        header.add_widget(marca_municipal)
-
-        principal.add_widget(
-            header
-        )
-
-        # ====================================================
-        # TITULO
-        # ====================================================
-
-        titulo = Label(
-            text="BIENVENIDO",
-            font_size=dp(38),
-            bold=True,
-            color=AZUL_HEADER,
-            size_hint_y=None,
-            height=dp(60)
-        )
-
-        principal.add_widget(
-            titulo
-        )
-
-        # ====================================================
-        # SUBTITULO
-        # ====================================================
-
-        mensaje = Label(
-            text="Seleccione una opción para comenzar",
-            font_size=dp(19),
-            color=GRIS,
-            size_hint_y=None,
-            height=dp(35)
-        )
-
-        principal.add_widget(
-            mensaje
-        )
-
-        # ====================================================
-        # TARJETAS
-        # ====================================================
-
-        tarjetas = GridLayout(
-            cols=2,
-            spacing=dp(18),
-            padding=[
-                dp(8),
-                dp(5)
-            ],
-            size_hint_y=1
-        )
-
-        # ----------------------------------------------------
-        # BENEFICIOS
-        # ----------------------------------------------------
-
-        beneficios = TarjetaMunicipal(
-            titulo="BENEFICIOS SOCIALES",
-            subtitulo="Solicitud de beneficios sociales",
-            icono="icon_beneficios.png",
-            color=AZUL_BENEFICIOS
-        )
-
-        beneficios.bind(
-            on_release=self.abrir_beneficios
-        )
-
-        tarjetas.add_widget(
-            beneficios
-        )
-
-        # ----------------------------------------------------
-        # RESERVAR
-        # ----------------------------------------------------
-
-        reservar = TarjetaMunicipal(
-            titulo="RESERVAR HORA",
-            subtitulo="Agendar atención",
-            icono="icon_reserva.png",
-            color=VERDE_RESERVA
-        )
-
-        reservar.bind(
-            on_release=self.abrir_reserva
-        )
-
-        tarjetas.add_widget(
-            reservar
-        )
-
-        # ----------------------------------------------------
-        # SOLICITUDES
-        # ----------------------------------------------------
-
-        solicitudes = TarjetaMunicipal(
-            titulo="SOLICITUDES MUNICIPALES",
-            subtitulo="Solicitudes y requerimientos",
-            icono="icon_solicitudes.png",
-            color=MORADO_SOLICITUDES
-        )
-
-        solicitudes.bind(
-            on_release=self.abrir_solicitudes
-        )
-
-        tarjetas.add_widget(
-            solicitudes
-        )
-
-        # ----------------------------------------------------
-        # DENUNCIAS
-        # ----------------------------------------------------
-
-        denuncias = TarjetaMunicipal(
-            titulo="DENUNCIAS Y FISCALIZACIÓN",
-            subtitulo="Solicitudes de denuncias y fiscalización",
-            icono="icon_denuncias.png",
-            color=NARANJO_DENUNCIAS
-        )
-
-        denuncias.bind(
-            on_release=self.abrir_denuncias
-        )
-
-        tarjetas.add_widget(
-            denuncias
-        )
-
-        principal.add_widget(
-            tarjetas
-        )
-
-        # ====================================================
-        # PIE DE PÁGINA
-        # ====================================================
-
-        pie = BoxLayout(
-            orientation="horizontal",
-            size_hint_y=None,
-            height=dp(68),
-            spacing=dp(8),
-            padding=[
-                dp(8),
-                dp(5)
-            ]
-        )
-
-        with pie.canvas.before:
-
-            Color(
-                rgba=AZUL_PIE
-            )
-
-            pie.fondo = RoundedRectangle(
-                pos=pie.pos,
-                size=pie.size,
-                radius=[dp(16)]
-            )
-
-        pie.bind(
-            pos=lambda obj, value:
-            setattr(
-                obj.fondo,
-                "pos",
-                value
-            ),
-            size=lambda obj, value:
-            setattr(
-                obj.fondo,
-                "size",
-                value
-            )
-        )
-
-        # ====================================================
-        # HORA
-        # ====================================================
-
-        reloj = BoxLayout(
-            orientation="horizontal",
-            size_hint_x=0.13,
-            spacing=dp(5)
-        )
-
-        self.label_hora = Label(
-            text="00:00",
-            font_size=dp(17),
-            bold=True,
-            color=BLANCO
-        )
-
-        reloj.add_widget(
-            self.label_hora
-        )
-
-        pie.add_widget(
-            reloj
-        )
-
-        # ====================================================
-        # FECHA
-        # ====================================================
-
-        calendario = BoxLayout(
-            orientation="horizontal",
-            size_hint_x=0.37,
-            spacing=dp(5)
-        )
-
-        self.label_fecha = Label(
-            text="",
-            font_size=dp(12),
-            color=BLANCO,
-            halign="left",
-            valign="middle"
-        )
-
-        self.label_fecha.bind(
-            size=lambda obj, value:
-            setattr(
-                obj,
-                "text_size",
-                value
-            )
-        )
-
-        calendario.add_widget(
-            self.label_fecha
-        )
-
-        pie.add_widget(
-            calendario
-        )
-
-        # ====================================================
-        # ESTADO
-        # ====================================================
-
-        estado = Button(
-            text="ESTADO DE MI SOLICITUD",
-            font_size=dp(14),
-            bold=True,
-            color=BLANCO,
-            background_normal="",
-            background_down="",
-            background_color=AZUL_PIE_OSCURO,
-            size_hint_x=0.32
-        )
-
-        estado.bind(
-            on_release=self.abrir_estado
-        )
-
-        pie.add_widget(
-            estado
-        )
-
-        # ====================================================
-        # AYUDA
-        # ====================================================
-
-        ayuda = Button(
-            text="?   AYUDA",
-            font_size=dp(13),
-            bold=True,
-            color=BLANCO,
-            background_normal="",
-            background_down="",
-            background_color=AZUL_PIE_OSCURO,
-            size_hint_x=0.18
-        )
-
-        ayuda.bind(
-            on_release=self.mostrar_ayuda
-        )
-
-        pie.add_widget(
-            ayuda
-        )
-
-        principal.add_widget(
-            pie
-        )
-
-        # ====================================================
-        # AGREGAR A LA PANTALLA
-        # ====================================================
-
-        self.add_widget(
-            principal
-        )
-
-        # ====================================================
-        # RELOJ
-        # ====================================================
-
-        Clock.schedule_interval(
-            self.actualizar_fecha_hora,
-            1
-        )
-
+    def adaptar_pantalla(self, *args):
+        # dp() convierte tamaños lógicos a píxeles físicos de Android.
+        ancho, alto = self.width, self.height
+        telefono = ancho < dp(600)
+        poca_altura = alto < dp(560)
+        self.principal.padding = [dp(10), dp(8), dp(10), dp(8)] if telefono else [dp(24), dp(18), dp(24), dp(18)]
+        self.principal.spacing = dp(7 if telefono else 13)
+        self.header.height = dp(84 if telefono else 116)
+        self.logo.width = dp(54 if telefono else 86)
+        self.nombre_muni_1.font_size = sp(15 if telefono else 23)
+        self.nombre_muni_2.font_size = sp(15 if telefono else 23)
+        self.subtitulo_header.font_size = sp(11 if telefono else 15)
+        self.frase_header.width = dp(0 if telefono else 145)
+        self.frase_header.opacity = 0 if telefono else 1
+        self.titulo.font_size = sp(26 if telefono else 36)
+        self.titulo.height = dp(44 if telefono else 56)
+        self.mensaje.font_size = sp(14 if telefono else 18)
+        self.mensaje.height = dp(30 if telefono else 36)
+        self.tarjetas.cols = 4 if ancho >= dp(850) and poca_altura else 2
+        self.tarjetas.spacing = dp(10 if telefono else 18)
+        self.pie.height = dp(85 if telefono else 92)
+        self.copyright_label.font_size = sp(9 if telefono else 11)
+        self.copyright_label.height = dp(28 if telefono else 22)
+        self.boton_estado.font_size = sp(11 if telefono else 14)
+        self.boton_ayuda.font_size = sp(11 if telefono else 14)
         self.actualizar_fecha_hora()
 
-    # ========================================================
-    # FECHA Y HORA
-    # ========================================================
-
-    def actualizar_fecha_hora(
-        self,
-        *args
-    ):
-
+    def actualizar_fecha_hora(self, *args):
         ahora = datetime.now()
+        self.label_hora.text = ahora.strftime("%H:%M")
+        if self.width < dp(600):
+            self.label_fecha.text = ahora.strftime("%d/%m/%Y")
+        else:
+            dias = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+            meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+                     "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+            self.label_fecha.text = (
+                f"{dias[ahora.weekday()]}, {ahora.day} de {meses[ahora.month - 1]} de {ahora.year}"
+            )
 
-        self.label_hora.text = ahora.strftime(
-            "%H:%M"
-        )
-
-        dias = {
-            0: "Lunes",
-            1: "Martes",
-            2: "Miércoles",
-            3: "Jueves",
-            4: "Viernes",
-            5: "Sábado",
-            6: "Domingo"
-        }
-
-        meses = {
-            1: "Enero",
-            2: "Febrero",
-            3: "Marzo",
-            4: "Abril",
-            5: "Mayo",
-            6: "Junio",
-            7: "Julio",
-            8: "Agosto",
-            9: "Septiembre",
-            10: "Octubre",
-            11: "Noviembre",
-            12: "Diciembre"
-        }
-
-        self.label_fecha.text = (
-            f"{dias[ahora.weekday()]}, "
-            f"{ahora.day} de "
-            f"{meses[ahora.month]} de "
-            f"{ahora.year}"
-        )
-
-    # ========================================================
-    # NAVEGACIÓN
-    # ========================================================
-
+    # Navegación del código original: mantiene los mismos destinos y categorías.
     def abrir_categoria(self, categoria):
-        """Abre directamente la categoría elegida, sin exigir inicio de sesión.
-
-        La autenticación se solicita al final del trámite, justo antes de
-        registrar/enviar la solicitud cuando el trámite lo requiere.
-        """
+        """Abre categoría; autenticación al registrar un trámite, si corresponde."""
         tramites = self.manager.get_screen("tramites")
-
-        # Limpiar los datos de una navegación anterior para no recuperar
-        # accidentalmente un trámite o formulario previo.
         tramites.tramite_actual = None
         tramites.categoria_actual = ""
         tramites.archivo = None
@@ -866,7 +316,6 @@ class InicioScreen(Screen):
         tramites.horarios = []
         if hasattr(tramites, "archivos_eda"):
             tramites.archivos_eda = {"cedula": None, "avaluo": None, "otro": None}
-
         tramites.mostrar_categoria(categoria)
         self.manager.current = "tramites"
 
@@ -895,27 +344,15 @@ class InicioScreen(Screen):
         print("ABRIENDO ESTADO DE SOLICITUD")
         self.manager.current = "seguimiento"
 
-    # ========================================================
-    # AYUDA
-    # ========================================================
-
-    def mostrar_ayuda(
-        self,
-        *args
-    ):
-
-        print(
-            "AYUDA SELECCIONADA"
+    def mostrar_ayuda(self, *args):
+        mensaje = Label(
+            text="Seleccione un servicio para comenzar.\n"
+                 "Use 'Estado de mi solicitud' para consultar su seguimiento.",
+            halign="center", valign="middle", font_size=sp(15),
         )
-
-    # ========================================================
-    # FONDO
-    # ========================================================
-
-    def actualizar_fondo(
-        self,
-        *args
-    ):
-
-        self.fondo.pos = self.pos
-        self.fondo.size = self.size
+        mensaje.bind(size=ajustar_texto)
+        popup = Popup(
+            title="Ayuda del Tótem Municipal", content=mensaje,
+            size_hint=(0.85, None), height=dp(240), auto_dismiss=True,
+        )
+        popup.open()
