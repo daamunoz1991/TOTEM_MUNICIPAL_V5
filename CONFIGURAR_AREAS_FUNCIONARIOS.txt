@@ -1,0 +1,15 @@
+CONFIGURACIÓN DE ÁREAS PARA EL PANEL DE FUNCIONARIOS
+
+El panel ahora exige que cada cuenta LDAP tenga un área configurada. En el archivo .env ubicado en la raíz de TOTEM_WORK, agregue LDAP_STAFF_AREAS con formato usuario=Área;usuario2=Área.
+
+Ejemplo basado en las áreas del catálogo compartido (reemplace los usuarios por sus UID LDAP reales):
+LDAP_STAFF_AREAS=prueba.social=Seguridad Humana;usuario.social=Departamento Social;usuario.ambiental=Gestión Ambiental;usuario.obras=Obras Municipales;usuario.transito=Tránsito;usuario.vet=Veterinaria Municipal
+
+IMPORTANTE: el ejemplo no afirma que esos UID existan. Configure los UID reales. El nombre del área debe coincidir con el campo Tramite.departamento en PostgreSQL. El servidor filtra GET /solicitudes y verifica también el área en PUT /solicitudes/{codigo}/estado; ocultar filas en el HTML no es un control de seguridad.
+
+Para probar el panel localmente:
+1) API: python -m uvicorn server.main:app --host 0.0.0.0 --port 8001
+2) En otra PowerShell, desde TOTEM_WORK: python -m http.server 5500 --directory web
+3) Abrir http://127.0.0.1:5500/panel_funcionario_totem.html
+
+La configuración CORS predeterminada de server.main.py ya permite localhost:5500 y 127.0.0.1:5500. Reinicie Uvicorn después de modificar .env.
